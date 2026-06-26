@@ -28,6 +28,29 @@ export async function initFFmpeg(): Promise<import('@ffmpeg/ffmpeg').FFmpeg> {
   return ff
 }
 
+/** Convert FileData (Uint8Array | string) from ffmpeg to a Blob. */
+function fileDataToBlob(data: unknown, mimeType: string): Blob {
+  if (typeof data === 'string') {
+    return new Blob([data], { type: mimeType })
+  }
+  // Copy into a plain ArrayBuffer to avoid SharedArrayBuffer typing issues
+  const u8 = data as Uint8Array
+  const copy = new Uint8Array(u8.length)
+  copy.set(u8)
+  return new Blob([copy.buffer], { type: mimeType })
+}
+
+/** Convert FileData to a base64 data URL. */
+function fileDataToBase64DataURL(data: unknown, mimeType: string): string {
+  const u8 = data as Uint8Array
+  let binary = ''
+  for (let i = 0; i < u8.length; i++) {
+    binary += String.fromCharCode(u8[i])
+  }
+  const base64 = btoa(binary)
+  return `data:${mimeType};base64,${base64}`
+}
+
 /**
  * Extract audio from a video file as a WebM/Opus blob suitable for Whisper.
  */
@@ -42,10 +65,10 @@ export async function extractAudio(videoFile: File): Promise<Blob> {
 
   await ff.exec([
     '-i', inputName,
-    '-vn',                    // no video
+    '-vn',
     '-acodec', 'libopus',
     '-b:a', '64k',
-    '-ar', '16000',           // 16 kHz sample rate (Whisper preference)
+    '-ar', '16000',
     outputName,
   ])
 
@@ -53,7 +76,7 @@ export async function extractAudio(videoFile: File): Promise<Blob> {
   await ff.deleteFile(inputName)
   await ff.deleteFile(outputName)
 
-  return new Blob([data], { type: 'audio/webm' })
+  return fileDataToBlob(data, 'audio/webm')
 }
 
 /**
@@ -75,58 +98,59 @@ function buildSRT(subtitles: SubtitleSegment[]): string {
 }
 
 /**
- * Get ffmpeg drawtext filter style options for a given SubtitleStyle.
+ * Get ASS style string for burning subtitles.
+ * Returns a force_style compatible string for the subtitles filter.
  */
-function getSubtitleFilterStyle(style: SubtitleStyle): string {
+function buildForceStyle(style: SubtitleStyle): string {
   const { colorPreset, verticalPosition } = style
 
-  let fontcolor = 'white'
-  let bordercolor = 'black'
-  let borderw = '3'
-  let boxEnable = '0'
-  let boxcolor = 'black@0.6'
+  // ASS alignment: 2=bottom-center, 8=top-center, 5=middle-center
+  let alignment = '2'
+  if (verticalPosition === 'top') alignment = '8'
+  else if (verticalPosition === 'center') alignment = '5'
+
+  // Colours in ASS hex: &HAABBGGRR (alpha, blue, green, red)
+  let primaryColour = '&H00FFFFFF' // white
+  let outlineColour = '&H00000000' // black
+  let backColour = '&H00000000'
+  let outline = '2'
+  let shadow = '0'
+  let borderStyle = '1' // 1=outline, 3=opaque box
 
   switch (colorPreset) {
     case 'white-black-stroke':
-      fontcolor = 'white'
-      bordercolor = 'black'
-      borderw = '3'
-      boxEnable = '0'
+      primaryColour = '&H00FFFFFF'
+      outlineColour = '&H00000000'
+      outline = '2'
+      borderStyle = '1'
       break
     case 'yellow-black-stroke':
-      fontcolor = 'yellow'
-      bordercolor = 'black'
-      borderw = '3'
-      boxEnable = '0'
+      primaryColour = '&H0000E5FF' // yellow in BGR
+      outlineColour = '&H00000000'
+      outline = '2'
+      borderStyle = '1'
       break
     case 'white-black-box':
-      fontcolor = 'white'
-      bordercolor = 'black'
-      borderw = '0'
-      boxEnable = '1'
-      boxcolor = 'black@0.75'
+      primaryColour = '&H00FFFFFF'
+      backColour = '&HBF000000' // semi-transparent black
+      outline = '0'
+      shadow = '0'
+      borderStyle = '3'
       break
   }
 
-  let yExpr = ''
-  switch (verticalPosition) {
-    case 'top':
-      yExpr = 'h*0.08'
-      break
-    case 'center':
-      yExpr = '(h-text_h)/2'
-      break
-    case 'bottom':
-    default:
-      yExpr = 'h-text_h-h*0.08'
-      break
-  }
-
-  const boxStr = boxEnable === '1'
-    ? `:box=1:boxcolor=${boxcolor}:boxborderw=8`
-    : ''
-
-  return `fontcolor=${fontcolor}:bordercolor=${bordercolor}:borderw=${borderw}${boxStr}:x=(w-text_w)/2:y=${yExpr}:fontsize=h/18`
+  return [
+    `FontName=Noto Sans TC`,
+    `FontSize=24`,
+    `PrimaryColour=${primaryColour}`,
+    `OutlineColour=${outlineColour}`,
+    `BackColour=${backColour}`,
+    `Outline=${outline}`,
+    `Shadow=${shadow}`,
+    `BorderStyle=${borderStyle}`,
+    `Alignment=${alignment}`,
+    `MarginV=30`,
+  ].join(',')
 }
 
 /**
@@ -148,16 +172,15 @@ export async function cutVideoSegments(
 
   const segmentFiles: string[] = []
 
-  // Extract each kept segment individually
   for (let i = 0; i < keepSegments.length; i++) {
     const seg = keepSegments[i]
     const segName = `seg_${i}.mp4`
-    const duration = seg.end - seg.start
+    const segDuration = seg.end - seg.start
 
     await ff.exec([
       '-i', inputName,
       '-ss', String(seg.start),
-      '-t', String(duration),
+      '-t', String(segDuration),
       '-c:v', 'libx264',
       '-c:a', 'aac',
       '-avoid_negative_ts', 'make_zero',
@@ -169,11 +192,9 @@ export async function cutVideoSegments(
   let outputBlob: Blob
 
   if (segmentFiles.length === 1) {
-    // Only one segment – just return it directly
     const data = await ff.readFile(segmentFiles[0])
-    outputBlob = new Blob([data], { type: 'video/mp4' })
+    outputBlob = fileDataToBlob(data, 'video/mp4')
   } else {
-    // Write a concat list file
     const concatList = segmentFiles.map((f) => `file '${f}'`).join('\n')
     const encoder = new TextEncoder()
     await ff.writeFile('concat_list.txt', encoder.encode(concatList))
@@ -187,13 +208,12 @@ export async function cutVideoSegments(
     ])
 
     const data = await ff.readFile('output_cut.mp4')
-    outputBlob = new Blob([data], { type: 'video/mp4' })
+    outputBlob = fileDataToBlob(data, 'video/mp4')
 
     await ff.deleteFile('concat_list.txt')
     await ff.deleteFile('output_cut.mp4')
   }
 
-  // Cleanup
   await ff.deleteFile(inputName)
   for (const f of segmentFiles) {
     await ff.deleteFile(f)
@@ -203,7 +223,7 @@ export async function cutVideoSegments(
 }
 
 /**
- * Burn subtitles onto a video blob using ffmpeg subtitles/drawtext filters.
+ * Burn subtitles onto a video blob using ffmpeg subtitles filter.
  * Returns the final MP4 blob with burned-in subtitles.
  */
 export async function burnSubtitles(
@@ -224,12 +244,11 @@ export async function burnSubtitles(
   const encoder = new TextEncoder()
   await ff.writeFile(srtName, encoder.encode(srtContent))
 
-  const styleStr = getSubtitleFilterStyle(style)
+  const forceStyle = buildForceStyle(style)
 
-  // Use the subtitles filter; fall back to ASS styling via force_style
   await ff.exec([
     '-i', inputName,
-    '-vf', `subtitles=${srtName}:force_style='FontName=Noto Sans TC,FontSize=24,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=2,Alignment=2'`,
+    '-vf', `subtitles=${srtName}:force_style='${forceStyle}'`,
     '-c:v', 'libx264',
     '-c:a', 'aac',
     '-preset', 'fast',
@@ -237,20 +256,17 @@ export async function burnSubtitles(
   ])
 
   const data = await ff.readFile(outputName)
-  const outputBlob = new Blob([data], { type: 'video/mp4' })
+  const outputBlob = fileDataToBlob(data, 'video/mp4')
 
   await ff.deleteFile(inputName)
   await ff.deleteFile(srtName)
   await ff.deleteFile(outputName)
 
-  // Use styleStr to satisfy the linter (it's computed but not used in simplified filter)
-  void styleStr
-
   return outputBlob
 }
 
 /**
- * Extract a single video frame at the given time as a base64 PNG string.
+ * Extract a single video frame at the given time as a base64 PNG data URL.
  */
 export async function extractFrame(
   videoFile: File,
@@ -273,12 +289,12 @@ export async function extractFrame(
   ])
 
   const data = await ff.readFile(outputName)
-  const base64 = Buffer.from(data as Uint8Array).toString('base64')
+  const dataUrl = fileDataToBase64DataURL(data, 'image/png')
 
   await ff.deleteFile(inputName)
   await ff.deleteFile(outputName)
 
-  return `data:image/png;base64,${base64}`
+  return dataUrl
 }
 
 /**

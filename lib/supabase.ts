@@ -1,20 +1,38 @@
-import { createClient } from '@supabase/supabase-js'
 import type { SubtitleSegment } from './types'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+/**
+ * Lazily create the Supabase client only when first needed (avoids SSR crashes
+ * when env vars are absent at build time).
+ */
+function getClient() {
+  if (typeof window === 'undefined') {
+    throw new Error('Supabase client can only be used in the browser')
+  }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error(
+      'Missing Supabase environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set in .env.local'
+    )
+  }
+
+  // Dynamic import so the module itself doesn't execute at SSR/build time
+  const { createClient } = require('@supabase/supabase-js') as typeof import('@supabase/supabase-js')
+  return createClient(supabaseUrl, supabaseAnonKey)
+}
 
 /**
  * Call the Supabase Edge Function 'transcribe' with an audio blob.
  * Returns an array of SubtitleSegment parsed from Whisper output.
  */
 export async function transcribeAudio(audioBlob: Blob): Promise<SubtitleSegment[]> {
+  const client = getClient()
   const formData = new FormData()
   formData.append('audio', audioBlob, 'audio.webm')
 
-  const { data, error } = await supabase.functions.invoke('transcribe', {
+  const { data, error } = await client.functions.invoke('transcribe', {
     body: formData,
   })
 
@@ -24,10 +42,13 @@ export async function transcribeAudio(audioBlob: Blob): Promise<SubtitleSegment[
 
   // Edge function returns { segments: [...] }
   const segments: SubtitleSegment[] = (data.segments ?? data).map(
-    (seg: { id?: string; start?: number; end?: number; text?: string }, index: number) => ({
+    (
+      seg: { id?: string; start?: number; startTime?: number; end?: number; endTime?: number; text?: string },
+      index: number
+    ) => ({
       id: seg.id ?? `seg-${index}`,
-      startTime: seg.start ?? 0,
-      endTime: seg.end ?? 0,
+      startTime: seg.startTime ?? seg.start ?? 0,
+      endTime: seg.endTime ?? seg.end ?? 0,
       text: (seg.text ?? '').trim(),
       deleted: false,
       brollImageUrl: undefined,
@@ -45,7 +66,9 @@ export async function generateBrollImage(
   prompt: string,
   subtitleContext: string
 ): Promise<string> {
-  const { data, error } = await supabase.functions.invoke('generate-image', {
+  const client = getClient()
+
+  const { data, error } = await client.functions.invoke('generate-image', {
     body: JSON.stringify({ prompt, context: subtitleContext }),
     headers: { 'Content-Type': 'application/json' },
   })
@@ -65,7 +88,9 @@ export async function generateThumbnail(
   prompt: string,
   frameBase64?: string
 ): Promise<string> {
-  const { data, error } = await supabase.functions.invoke('generate-thumbnail', {
+  const client = getClient()
+
+  const { data, error } = await client.functions.invoke('generate-thumbnail', {
     body: JSON.stringify({ prompt, frameBase64 }),
     headers: { 'Content-Type': 'application/json' },
   })
