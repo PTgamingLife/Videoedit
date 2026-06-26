@@ -49,9 +49,9 @@ export default function BRollPanel({
   }
 
   return (
-    <div className="h-full flex bg-gray-800/50">
-      {/* Left: Info + Controls */}
-      <div className="flex flex-col gap-3 p-4 w-80 shrink-0 border-r border-gray-700">
+    <div className="h-full flex flex-col lg:flex-row bg-gray-800/50 overflow-y-auto lg:overflow-hidden">
+      {/* Top (mobile) / Left (desktop): Info + Controls */}
+      <div className="flex flex-col gap-3 p-4 shrink-0 lg:w-72 lg:border-r border-b lg:border-b-0 border-gray-700">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-white flex items-center gap-2">
             <Wand2 className="w-4 h-4 text-yellow-400" />
