@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import type { EditorState, SubtitleSegment, SubtitleStyle } from '@/lib/types'
 import { transcribeAudio } from '@/lib/supabase'
 import { extractAudio } from '@/lib/ffmpeg-utils'
@@ -40,6 +40,14 @@ export default function HomePage() {
   const [brollSubtitle, setBrollSubtitle] = useState<SubtitleSegment | null>(null)
   const [activeBottomPanel, setActiveBottomPanel] = useState<'broll' | 'thumbnail' | 'export' | null>(null)
   const videoSeekRef = useRef<(time: number) => void>(() => {})
+
+  // Auto-select subtitle card matching current playback position
+  useEffect(() => {
+    const active = editorState.subtitles.find(
+      (s) => !s.deleted && s.startTime <= currentTime && s.endTime >= currentTime
+    )
+    if (active) setSelectedSubtitleId(active.id)
+  }, [currentTime, editorState.subtitles])
 
   const handleFileSelected = useCallback(async (file: File) => {
     const videoUrl = URL.createObjectURL(file)

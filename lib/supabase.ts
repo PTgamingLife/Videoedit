@@ -69,12 +69,17 @@ export async function generateBrollImage(
   const client = getClient()
 
   const { data, error } = await client.functions.invoke('generate-image', {
-    body: JSON.stringify({ prompt, context: subtitleContext }),
-    headers: { 'Content-Type': 'application/json' },
+    body: { prompt, context: subtitleContext },
   })
 
   if (error) {
-    throw new Error(`B-roll generation failed: ${error.message}`)
+    let msg = error.message
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = await (error as any).context?.json?.()
+      if (body?.error) msg = body.error
+    } catch {}
+    throw new Error(`B-roll generation failed: ${msg}`)
   }
 
   return data.imageUrl as string
@@ -91,12 +96,17 @@ export async function generateThumbnail(
   const client = getClient()
 
   const { data, error } = await client.functions.invoke('generate-thumbnail', {
-    body: JSON.stringify({ prompt, frameBase64 }),
-    headers: { 'Content-Type': 'application/json' },
+    body: { prompt, frameBase64 },
   })
 
   if (error) {
-    throw new Error(`Thumbnail generation failed: ${error.message}`)
+    let msg = error.message
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = await (error as any).context?.json?.()
+      if (body?.error) msg = body.error
+    } catch {}
+    throw new Error(`Thumbnail generation failed: ${msg}`)
   }
 
   return data.imageUrl as string
