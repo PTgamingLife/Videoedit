@@ -28,7 +28,6 @@ serve(async (req) => {
       n: 1,
       size: '1792x1024',
       quality: 'hd',
-      response_format: 'url',
     }
 
     const response = await fetch('https://api.openai.com/v1/images/generations', {

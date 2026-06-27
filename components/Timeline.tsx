@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import type { SubtitleSegment } from '@/lib/types'
 
 interface TimelineProps {
@@ -17,23 +17,61 @@ function formatTime(s: number): string {
 }
 
 export default function Timeline({ duration, subtitles, currentTime, onSeek }: TimelineProps) {
-  const handleClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      const rect = e.currentTarget.getBoundingClientRect()
-      const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+  const trackRef = useRef<HTMLDivElement>(null)
+  const draggingRef = useRef(false)
+
+  const seekFromEvent = useCallback(
+    (clientX: number) => {
+      if (!trackRef.current || duration <= 0) return
+      const rect = trackRef.current.getBoundingClientRect()
+      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
       onSeek(ratio * duration)
     },
     [duration, onSeek]
   )
 
+  // ── Mouse ──
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      draggingRef.current = true
+      seekFromEvent(e.clientX)
+
+      const onMove = (ev: MouseEvent) => {
+        if (draggingRef.current) seekFromEvent(ev.clientX)
+      }
+      const onUp = () => {
+        draggingRef.current = false
+        window.removeEventListener('mousemove', onMove)
+        window.removeEventListener('mouseup', onUp)
+      }
+      window.addEventListener('mousemove', onMove)
+      window.addEventListener('mouseup', onUp)
+    },
+    [seekFromEvent]
+  )
+
+  // ── Touch ──
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      seekFromEvent(e.touches[0].clientX)
+    },
+    [seekFromEvent]
+  )
+
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      seekFromEvent(e.touches[0].clientX)
+    },
+    [seekFromEvent]
+  )
+
   const toPercent = (time: number) => (duration > 0 ? (time / duration) * 100 : 0)
 
-  // Build tick marks at even intervals
   const tickInterval = duration <= 60 ? 10 : duration <= 300 ? 30 : 60
   const ticks: number[] = []
-  for (let t = 0; t <= duration; t += tickInterval) {
-    ticks.push(t)
-  }
+  for (let t = 0; t <= duration; t += tickInterval) ticks.push(t)
 
   const progress = toPercent(currentTime)
 
@@ -56,8 +94,11 @@ export default function Timeline({ duration, subtitles, currentTime, onSeek }: T
 
       {/* Main track */}
       <div
-        className="relative h-8 cursor-crosshair rounded overflow-hidden bg-gray-800"
-        onClick={handleClick}
+        ref={trackRef}
+        className="relative h-8 cursor-pointer rounded overflow-hidden bg-gray-800 touch-none"
+        onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
       >
         {/* Subtitle segments */}
         {subtitles.map((seg) => {
@@ -81,14 +122,12 @@ export default function Timeline({ duration, subtitles, currentTime, onSeek }: T
           style={{ left: `${progress}%` }}
         />
 
-        {/* Time tooltip */}
+        {/* Time tooltip above playhead */}
         <div
           className="absolute top-0 h-full flex items-center pointer-events-none"
           style={{ left: `${progress}%` }}
         >
-          <div
-            className="absolute -top-6 left-0 -translate-x-1/2 text-xs bg-gray-700 text-white px-1.5 py-0.5 rounded whitespace-nowrap"
-          >
+          <div className="absolute -top-6 left-0 -translate-x-1/2 text-xs bg-gray-700 text-white px-1.5 py-0.5 rounded whitespace-nowrap">
             {formatTime(currentTime)}
           </div>
         </div>
