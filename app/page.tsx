@@ -233,43 +233,44 @@ export default function HomePage() {
               <StylePanel style={editorState.style} onStyleChange={handleStyleChange} />
             </div>
 
-            {/* ── Bottom panels (overlay from bottom) ── */}
-            {activeBottomPanel === 'broll' && brollSubtitle && (
-              <div className="shrink-0 border-t border-gray-700 h-64">
-                <BRollPanel
-                  selectedSubtitle={brollSubtitle}
-                  onImageGenerated={handleBrollImageGenerated}
-                  onClose={() => { setActiveBottomPanel(null); setBrollSubtitle(null) }}
-                />
-              </div>
-            )}
-
-            {activeBottomPanel === 'thumbnail' && (
-              <div className="shrink-0 border-t border-gray-700 h-72">
-                <ThumbnailEditor
-                  videoFile={editorState.videoFile!}
-                  currentTime={currentTime}
-                  onThumbnailGenerated={handleThumbnailGenerated}
-                  onClose={() => setActiveBottomPanel(null)}
-                />
-              </div>
-            )}
-
-            {activeBottomPanel === 'export' && (
-              <div className="shrink-0 border-t border-gray-700 h-64">
-                <ExportPanel
-                  videoFile={editorState.videoFile!}
-                  subtitles={editorState.subtitles}
-                  style={editorState.style}
-                  duration={editorState.duration}
-                  onClose={() => setActiveBottomPanel(null)}
-                />
-              </div>
-            )}
 
           </div>
         )}
       </main>
+
+      {/* ── Fixed bottom overlays ── */}
+      {activeBottomPanel === 'broll' && brollSubtitle && (
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-gray-700 bg-gray-900 shadow-2xl" style={{ height: '60vh' }}>
+          <BRollPanel
+            selectedSubtitle={brollSubtitle}
+            onImageGenerated={handleBrollImageGenerated}
+            onClose={() => { setActiveBottomPanel(null); setBrollSubtitle(null) }}
+          />
+        </div>
+      )}
+
+      {activeBottomPanel === 'thumbnail' && (
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-gray-700 bg-gray-900 shadow-2xl" style={{ height: '60vh' }}>
+          <ThumbnailEditor
+            videoFile={editorState.videoFile!}
+            currentTime={currentTime}
+            onThumbnailGenerated={handleThumbnailGenerated}
+            onClose={() => setActiveBottomPanel(null)}
+          />
+        </div>
+      )}
+
+      {activeBottomPanel === 'export' && (
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-gray-700 bg-gray-900 shadow-2xl" style={{ height: '60vh' }}>
+          <ExportPanel
+            videoFile={editorState.videoFile!}
+            subtitles={editorState.subtitles}
+            style={editorState.style}
+            duration={editorState.duration}
+            onClose={() => setActiveBottomPanel(null)}
+          />
+        </div>
+      )}
     </div>
   )
 }
