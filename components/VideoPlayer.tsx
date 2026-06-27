@@ -121,7 +121,10 @@ export default function VideoPlayer({
           className="max-h-full max-w-full object-contain"
           onTimeUpdate={handleTimeUpdate}
           onSeeking={() => { isSeekingRef.current = true }}
-          onSeeked={() => { isSeekingRef.current = false }}
+          onSeeked={() => {
+            isSeekingRef.current = false
+            if (videoRef.current) onTimeUpdate(videoRef.current.currentTime)
+          }}
           controls={false}
           onClick={() => {
             if (videoRef.current) {
