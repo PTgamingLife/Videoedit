@@ -15,7 +15,6 @@ import ThumbnailEditor from '@/components/ThumbnailEditor'
 import ExportPanel from '@/components/ExportPanel'
 
 type Phase = 'upload' | 'processing' | 'editor'
-type MobileTab = 'subtitles' | 'style'
 
 const defaultStyle: SubtitleStyle = {
   colorPreset: 'white-black-stroke',
@@ -40,7 +39,6 @@ export default function HomePage() {
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<string | null>(null)
   const [brollSubtitle, setBrollSubtitle] = useState<SubtitleSegment | null>(null)
   const [activeBottomPanel, setActiveBottomPanel] = useState<'broll' | 'thumbnail' | 'export' | null>(null)
-  const [mobileTab, setMobileTab] = useState<MobileTab>('subtitles')
   const videoSeekRef = useRef<(time: number) => void>(() => {})
 
   const handleFileSelected = useCallback(async (file: File) => {
@@ -51,23 +49,18 @@ export default function HomePage() {
       vid.onloadedmetadata = () => resolve(vid.duration)
       vid.src = videoUrl
     })
-
     setEditorState((prev) => ({ ...prev, videoFile: file, videoUrl, duration }))
     setProcessingError(null)
     setPhase('processing')
-
     try {
       setProcessingStatus('正在提取音訊…')
       const audioBlob = await extractAudio(file)
-
       setProcessingStatus('正在轉錄語音（Whisper）…')
       const subtitles = await transcribeAudio(audioBlob)
-
       setEditorState((prev) => ({ ...prev, subtitles }))
       setPhase('editor')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setProcessingError(msg)
+      setProcessingError(err instanceof Error ? err.message : String(err))
       setProcessingStatus('')
     }
   }, [])
@@ -82,9 +75,7 @@ export default function HomePage() {
   const handleSubtitleDelete = useCallback((id: string) => {
     setEditorState((prev) => ({
       ...prev,
-      subtitles: prev.subtitles.map((s) =>
-        s.id === id ? { ...s, deleted: !s.deleted } : s
-      ),
+      subtitles: prev.subtitles.map((s) => s.id === id ? { ...s, deleted: !s.deleted } : s),
     }))
   }, [])
 
@@ -96,9 +87,7 @@ export default function HomePage() {
   const handleBrollImageGenerated = useCallback((subtitleId: string, imageUrl: string) => {
     setEditorState((prev) => ({
       ...prev,
-      subtitles: prev.subtitles.map((s) =>
-        s.id === subtitleId ? { ...s, brollImageUrl: imageUrl } : s
-      ),
+      subtitles: prev.subtitles.map((s) => s.id === subtitleId ? { ...s, brollImageUrl: imageUrl } : s),
     }))
   }, [])
 
@@ -110,20 +99,11 @@ export default function HomePage() {
     setEditorState((prev) => ({ ...prev, thumbnailUrl: url }))
   }, [])
 
-  const handleSubtitleSelect = useCallback(
-    (id: string) => {
-      setSelectedSubtitleId(id)
-      const sub = editorState.subtitles.find((s) => s.id === id)
-      if (sub) videoSeekRef.current(sub.startTime)
-    },
-    [editorState.subtitles]
-  )
-
-  const handleRetry = () => {
-    setPhase('upload')
-    setProcessingError(null)
-    setEditorState(defaultEditorState)
-  }
+  const handleSubtitleSelect = useCallback((id: string) => {
+    setSelectedSubtitleId(id)
+    const sub = editorState.subtitles.find((s) => s.id === id)
+    if (sub) videoSeekRef.current(sub.startTime)
+  }, [editorState.subtitles])
 
   const togglePanel = (panel: 'thumbnail' | 'export') => {
     setActiveBottomPanel((prev) => (prev === panel ? null : panel))
@@ -131,42 +111,43 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col h-[100dvh] bg-gray-900 text-white font-tc overflow-hidden">
-      {/* Header */}
-      <header className="flex items-center justify-between px-3 py-2 lg:px-5 lg:py-3 bg-gray-800 border-b border-gray-700 shrink-0">
+      {/* ── Header ── */}
+      <header className="flex items-center justify-between px-4 py-2.5 bg-gray-800 border-b border-gray-700 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-indigo-400 font-bold text-base lg:text-lg tracking-tight whitespace-nowrap">
+          <span className="text-indigo-400 font-bold text-base tracking-tight whitespace-nowrap">
             VideoEdit Pro
           </span>
-          <span className="text-gray-500 text-xs hidden sm:inline truncate">口播影片自動剪輯</span>
+          <span className="text-gray-600 text-xs hidden sm:inline">口播影片自動剪輯</span>
         </div>
         {phase === 'editor' && (
-          <div className="flex gap-1.5 shrink-0">
+          <div className="flex gap-2 shrink-0">
             <button
               onClick={() => togglePanel('thumbnail')}
-              className={`px-2 py-1 lg:px-3 lg:py-1.5 rounded text-xs lg:text-sm font-medium transition-colors whitespace-nowrap ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 activeBottomPanel === 'thumbnail'
                   ? 'bg-indigo-600 text-white'
                   : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
             >
-              封面
+              封面產生器
             </button>
             <button
               onClick={() => togglePanel('export')}
-              className={`px-2 py-1 lg:px-3 lg:py-1.5 rounded text-xs lg:text-sm font-medium transition-colors whitespace-nowrap ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 activeBottomPanel === 'export'
                   ? 'bg-indigo-600 text-white'
                   : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
             >
-              匯出
+              匯出影片
             </button>
           </div>
         )}
       </header>
 
-      {/* Main */}
+      {/* ── Main ── */}
       <main className="flex-1 overflow-hidden min-h-0">
+
         {/* Upload */}
         {phase === 'upload' && (
           <div className="h-full flex items-center justify-center p-6">
@@ -185,7 +166,7 @@ export default function HomePage() {
                 <h2 className="text-xl font-semibold text-red-400">處理失敗</h2>
                 <p className="text-gray-400 text-sm break-all">{processingError}</p>
                 <button
-                  onClick={handleRetry}
+                  onClick={() => { setPhase('upload'); setProcessingError(null); setEditorState(defaultEditorState) }}
                   className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-white font-medium"
                 >
                   重新上傳
@@ -206,108 +187,65 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Editor */}
+        {/* Editor — single column layout */}
         {phase === 'editor' && editorState.videoUrl && (
           <div className="h-full flex flex-col overflow-hidden">
-            {/* Editor body */}
-            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
 
-              {/* ── Left column: Video + Timeline ── */}
-              <div className="flex flex-col lg:w-[58%] lg:border-r border-gray-700 shrink-0 lg:shrink lg:overflow-hidden">
-                {/* Video player: aspect-video on mobile, flex-1 on desktop */}
-                <div className="relative w-full aspect-video lg:aspect-auto lg:flex-1 bg-black overflow-hidden">
-                  <div className="absolute inset-0">
-                    <VideoPlayer
-                      videoUrl={editorState.videoUrl}
-                      currentTime={currentTime}
-                      duration={editorState.duration}
-                      subtitles={editorState.subtitles}
-                      style={editorState.style}
-                      onTimeUpdate={setCurrentTime}
-                      seekRef={videoSeekRef}
-                    />
-                  </div>
-                </div>
-                {/* Timeline */}
-                <div className="shrink-0 border-t border-gray-700">
-                  <Timeline
-                    duration={editorState.duration}
-                    subtitles={editorState.subtitles}
-                    currentTime={currentTime}
-                    onSeek={(t) => videoSeekRef.current(t)}
-                  />
-                </div>
-              </div>
-
-              {/* ── Right column: Subtitle Editor + Style Panel ── */}
-              <div className="flex flex-col flex-1 lg:w-[42%] overflow-hidden min-h-0 border-t lg:border-t-0 border-gray-700">
-                {/* Mobile tab bar */}
-                <div className="flex lg:hidden shrink-0 border-b border-gray-700 bg-gray-800">
-                  <button
-                    onClick={() => setMobileTab('subtitles')}
-                    className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                      mobileTab === 'subtitles'
-                        ? 'text-indigo-400 border-b-2 border-indigo-400'
-                        : 'text-gray-400'
-                    }`}
-                  >
-                    字幕編輯 ({editorState.subtitles.filter(s => !s.deleted).length}/{editorState.subtitles.length})
-                  </button>
-                  <button
-                    onClick={() => setMobileTab('style')}
-                    className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                      mobileTab === 'style'
-                        ? 'text-indigo-400 border-b-2 border-indigo-400'
-                        : 'text-gray-400'
-                    }`}
-                  >
-                    樣式設定
-                  </button>
-                </div>
-
-                {/* Subtitle list — always on desktop, tab-controlled on mobile */}
-                <div
-                  className={`flex-1 overflow-y-auto min-h-0 ${
-                    mobileTab !== 'subtitles' ? 'hidden lg:flex lg:flex-col' : ''
-                  }`}
-                >
-                  <SubtitleEditor
-                    subtitles={editorState.subtitles}
-                    selectedId={selectedSubtitleId}
-                    onUpdate={handleSubtitleUpdate}
-                    onDelete={handleSubtitleDelete}
-                    onSelectForBroll={handleSelectForBroll}
-                    onSelect={handleSubtitleSelect}
-                  />
-                </div>
-
-                {/* Style panel — always on desktop, tab-controlled on mobile */}
-                <div
-                  className={`shrink-0 lg:border-t border-gray-700 ${
-                    mobileTab !== 'style' ? 'hidden lg:block' : ''
-                  }`}
-                >
-                  <StylePanel style={editorState.style} onStyleChange={handleStyleChange} />
-                </div>
+            {/* Video player — aspect-video, capped height */}
+            <div className="relative w-full shrink-0 bg-black overflow-hidden" style={{ maxHeight: '42vh' }}>
+              <div className="aspect-video w-full" style={{ maxHeight: '42vh' }}>
+                <VideoPlayer
+                  videoUrl={editorState.videoUrl}
+                  currentTime={currentTime}
+                  duration={editorState.duration}
+                  subtitles={editorState.subtitles}
+                  style={editorState.style}
+                  onTimeUpdate={setCurrentTime}
+                  seekRef={videoSeekRef}
+                />
               </div>
             </div>
 
-            {/* ── Bottom panels ── */}
+            {/* Timeline */}
+            <div className="shrink-0 border-t border-gray-700">
+              <Timeline
+                duration={editorState.duration}
+                subtitles={editorState.subtitles}
+                currentTime={currentTime}
+                onSeek={(t) => videoSeekRef.current(t)}
+              />
+            </div>
+
+            {/* Subtitle editor — horizontal cards */}
+            <div className="shrink-0 border-t border-gray-700 bg-gray-900">
+              <SubtitleEditor
+                subtitles={editorState.subtitles}
+                selectedId={selectedSubtitleId}
+                onUpdate={handleSubtitleUpdate}
+                onDelete={handleSubtitleDelete}
+                onSelectForBroll={handleSelectForBroll}
+                onSelect={handleSubtitleSelect}
+              />
+            </div>
+
+            {/* Style panel */}
+            <div className="shrink-0 border-t border-gray-700">
+              <StylePanel style={editorState.style} onStyleChange={handleStyleChange} />
+            </div>
+
+            {/* ── Bottom panels (overlay from bottom) ── */}
             {activeBottomPanel === 'broll' && brollSubtitle && (
-              <div className="shrink-0 border-t border-gray-700 h-64 lg:h-72">
+              <div className="shrink-0 border-t border-gray-700 h-64">
                 <BRollPanel
                   selectedSubtitle={brollSubtitle}
                   onImageGenerated={handleBrollImageGenerated}
-                  onClose={() => {
-                    setActiveBottomPanel(null)
-                    setBrollSubtitle(null)
-                  }}
+                  onClose={() => { setActiveBottomPanel(null); setBrollSubtitle(null) }}
                 />
               </div>
             )}
 
             {activeBottomPanel === 'thumbnail' && (
-              <div className="shrink-0 border-t border-gray-700 h-72 lg:h-80">
+              <div className="shrink-0 border-t border-gray-700 h-72">
                 <ThumbnailEditor
                   videoFile={editorState.videoFile!}
                   currentTime={currentTime}
@@ -318,7 +256,7 @@ export default function HomePage() {
             )}
 
             {activeBottomPanel === 'export' && (
-              <div className="shrink-0 border-t border-gray-700 h-64 lg:h-72">
+              <div className="shrink-0 border-t border-gray-700 h-64">
                 <ExportPanel
                   videoFile={editorState.videoFile!}
                   subtitles={editorState.subtitles}
@@ -328,6 +266,7 @@ export default function HomePage() {
                 />
               </div>
             )}
+
           </div>
         )}
       </main>
